@@ -1,0 +1,21 @@
+# API keys和敏感配置
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 项目文件
+*.mid
+*.mwproj

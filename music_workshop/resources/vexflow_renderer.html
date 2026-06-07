@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VexFlow Renderer</title>
+<script src="https://cdn.jsdelivr.net/npm/vexflow@5/dist/vexflow.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #fff; font-family: sans-serif; overflow-x: auto; }
+  #output { min-height: 200px; padding: 10px; }
+  .empty-msg {
+    color: #999;
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div id="output">
+  <div class="empty-msg">Play a melody and press Record to see sheet music</div>
+</div>
+<script>
+const { Factory, EasyScore, Formatter, Renderer } = VexFlow;
+
+function renderScore(scoreData) {
+  const div = document.getElementById('output');
+  div.innerHTML = '';
+
+  if (!scoreData.measures || scoreData.measures.length === 0) {
+    div.innerHTML = '<div class="empty-msg">No notes recorded yet</div>';
+    return;
+  }
+
+  // Calculate total width and height
+  const pageWidth = Math.max(800, div.parentElement ? div.parentElement.clientWidth : 800);
+  const staveWidth = Math.min(280, pageWidth / 3 - 30);
+  const measuresPerRow = Math.max(1, Math.floor(pageWidth / (staveWidth + 30)));
+
+  // Create the VexFlow renderer
+  const rows = Math.ceil(scoreData.measures.length / measuresPerRow);
+  const totalHeight = rows * 150 + 30;
+
+  const factory = new Factory({
+    rendererElement: div,
+    width: pageWidth,
+    height: totalHeight,
+  });
+
+  const context = factory.getContext();
+
+  let x = 10;
+  let y = 30;
+
+  // Key signature display
+  let ksAccidentals = 0;
+  if (typeof scoreData.key_signature === 'number') {
+    ksAccidentals = scoreData.key_signature;
+  }
+
+  scoreData.measures.forEach((measure, idx) => {
+    // Check if we need a new row
+    if (idx > 0 && idx % measuresPerRow === 0) {
+      x = 10;
+      y += 150;
+    }
+
+    const stave = new Stave(x, y, staveWidth);
+    stave.addClef('treble');
+
+    if (idx === 0) {
+      stave.addTimeSignature(scoreData.time_signature || '4/4');
+      if (ksAccidentals !== 0) {
+        stave.addKeySignature(ksAccidentals);
+      }
+    }
+
+    stave.setContext(context);
+    stave.draw();
+
+    // Build VexFlow voice from notes
+    if (measure.voices && measure.voices[0] && measure.voices[0].notes) {
+      const vexNotes = measure.voices[0].notes.map(n => {
+        const opts = { duration: n.duration, keys: n.keys };
+        if (n.dots) opts.dots = n.dots;
+        if (n.rest) opts.rest = true;
+        const vn = factory.StaveNote(opts);
+        // Apply accidentals
+        if (n.accidentals) {
+          vn.addModifier(new VexFlow.Accidental(n.accidentals), 0);
+        }
+        return vn;
+      });
+
+      if (vexNotes.length > 0) {
+        const voice = factory.Voice({ num_beats: 4, beat_value: 4 });
+        voice.addTickables(vexNotes);
+        voice.setStave(stave);
+
+        try {
+          new Formatter().joinVoices([voice]).format([voice], staveWidth - 15);
+          voice.draw(context, stave);
+        } catch(e) {
+          // If formatting fails, draw what we can
+          console.warn('VexFlow formatting error:', e);
+        }
+      }
+    }
+
+    x += staveWidth + 30;
+  });
+}
+
+// Listen for score data via Qt's QWebChannel or direct call
+function renderFromJson(jsonStr) {
+  try {
+    const data = JSON.parse(jsonStr);
+    renderScore(data);
+  } catch(e) {
+    console.error('Invalid score JSON:', e);
+  }
+}
+</script>
+</body>
+</html>
